@@ -14,8 +14,11 @@
     The actual search filter. Default value 'IsHidden = 0'
 .PARAMETER Credential
     The credential to use instead of using Kerberos
+.PARAMETER CSVExportFile
+    Optional output file to use for CSV-formatted output
+
 .NOTES
-    Author: Jan-Hendrik Peters, Andreas Mirbach
+    Original Authors: Jan-Hendrik Peters, Andreas Mirbach
 # Disclaimer
 # This module and it's scripts are not supported under any Microsoft standard support program or service.
 # The scripts are provided AS IS without warranty of any kind.
@@ -49,7 +52,11 @@ param
 
     [Parameter()]
     [pscredential]
-    $Credential
+    $Credential,
+
+    [Parameter()]
+    [string]
+    $CSVExportFile
 )
 
 if ($DownloadUri)
@@ -186,7 +193,11 @@ function Get-MissingUpdates
 
         [Parameter()]
         [pscredential]
-        $Credential
+        $Credential,
+        
+        [Parameter()]
+        [string]
+        $CSVExportFile
     )
 
     Write-Host ('Creating sessions to {0}' -f ($ComputerName -join ','))
@@ -363,6 +374,7 @@ function Get-MissingUpdates
             }    
 
             $update = New-Object -TypeName psobject |
+                Add-Member -MemberType NoteProperty -Name Host -Value ($env:COMPUTERNAME) -PassThru -Force |
                 Add-Member -MemberType NoteProperty -Name Id -Value ($result.SecurityBulletinIDs | Select-Object -First 1) -PassThru -Force |
                 Add-Member -MemberType NoteProperty -Name Guid -Value $result.Identity.UpdateId -PassThru -Force |
                 Add-Member -MemberType NoteProperty -Name BulletinId -Value $bulletinId -PassThru -Force |
@@ -389,7 +401,9 @@ function Get-MissingUpdates
         {
             Write-Warning -Message ('WSUS offline file {0} could not be removed. Error was {1}' -f $Destination, $_.Exception.Message)
         }
+
         return $missingUpdates
+
     }
 
     $remoteJobs = foreach ( $computer in $ComputerName)
@@ -490,7 +504,7 @@ function Get-MissingUpdates
                     return $null
                 }
             }
-
+            
             Invoke-Command -Session $session -ScriptBlock $remoteScript -HideComputerName -ErrorAction Stop -ArgumentList ($destination, $UpdateSearchFilter, $remoteScript)
 
             $session | Remove-PSSession
@@ -500,7 +514,12 @@ function Get-MissingUpdates
     Write-Verbose -Message ('Waiting for {0} remote jobs to finish' -f $remoteJobs.Count)
     $remoteJobs | Wait-Job
 
+    # whole collection returned at once, too late to hack computername
     $returnValues = $remoteJobs | Receive-Job
+    #foreach($update in $returnvalues){
+    #    $update.Host = $computer   # overkill?
+    #} 
+    $returnValues | Export-Csv $CsvExportFile -Append -NoTypeInformation
     return $returnValues
 }
 
@@ -519,5 +538,9 @@ if ($Credential)
     $parameters.Add("Credential", $Credential)
 }
 
+if($CSVExportFile){
+    remove-item $CsvExportFile -Force -ErrorAction Ignore
+    $parameters.Add("CsvExportFile", $CSVExportFile)
+}
 
 Get-MissingUpdates @parameters
