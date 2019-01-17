@@ -519,7 +519,9 @@ function Get-MissingUpdates
     #foreach($update in $returnvalues){
     #    $update.Host = $computer   # overkill?
     #} 
-    $returnValues | Export-Csv $CsvExportFile -Append -NoTypeInformation
+    if($CsvExportFile){
+        $returnValues | Export-Csv $CsvExportFile -Append -NoTypeInformation
+    }
     return $returnValues
 }
 
